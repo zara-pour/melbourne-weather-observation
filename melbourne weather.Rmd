@@ -1,0 +1,258 @@
+---
+title: "Assessment3:Case study"
+author: 'Zahra Ahmadpour(a1863476)'
+date: "13/8/2022"
+output:
+  html_document: default
+  word_document: default
+---
+
+
+
+### Load the dataset and clean the data e.g. day and month:
+
+```{r}
+pacman::p_load(modelr,lubridate,DT,tidyr,stringr,tidyverse,lubridate,gutenbergr,
+               caret,mlbench,inspectdf,readr,nycflights13,moments, 
+               correlation,Hmisc,car, forecast,knitr)
+melbourne  <- read_csv (file ='F:/melbourne.csv')
+
+
+melbourne <- melbourne %>% mutate(month= factor(month(melbourne$Date)))
+melbourne <- melbourne %>% mutate(week_day=factor(wday(melbourne$Date)))
+melbourne <- melbourne %>% select(Date,`Evaporation (mm)` ,week_day,month,
+                `Maximum Temperature (Deg C)`, `Minimum temperature (Deg C)`,
+                `9am relative humidity (%)`)
+head(melbourne)
+```
+
+
+### Univariate analysis:
+
+To check the continuous variables have a skew that could be resolved by a log transform,first I will produce the histogram for each continuous variables and skewness of them then I will review the logarithm transformation if it is needed.
+
+#### 1. Evaporation (mm):
+  
+```{r}
+ggplot(melbourne,aes(x=`Evaporation (mm)`))+geom_histogram(col="black")
+summary(melbourne$`Evaporation (mm)`)
+skewness(melbourne$`Evaporation (mm)`,na.rm=TRUE)
+
+
+# the log transformation of evaporation:
+melbourne <- mutate(melbourne, log_eva=log(`Evaporation (mm)`))
+ggplot(melbourne,aes(x=log_eva))+geom_histogram(col="black")+
+   labs( x="log(`Evaporation (mm)`)")
+melbourne$log_eva <- str_replace(melbourne$log_eva,"-Inf","NA")
+melbourne$log_eva  <- as.numeric(melbourne$log_eva)
+
+summary(melbourne$log_eva)
+skewness(melbourne$log_eva,na.rm=TRUE)
+
+```
+
+#### 2. Maximum Temperature (Deg C):
+
+```{r}
+ggplot(melbourne,aes(x=`Maximum Temperature (Deg C)`))+geom_histogram(col="black")
+summary(melbourne$`Maximum Temperature (Deg C)`)
+skewness(melbourne$`Maximum Temperature (Deg C)`)
+
+# log transformation of maximum Temperature:
+melbourne <- mutate(melbourne,log_maxtemp=log(`Maximum Temperature (Deg C)`))
+ggplot(melbourne,aes(x=log_maxtemp))+geom_histogram(col="black")+
+  labs( x="log(`Maximum temperature (Deg C)`)")
+summary(melbourne$log_maxtemp)
+skewness(melbourne$log_maxtemp)
+```
+
+#### 3. Minimum temperature (Deg C):
+
+```{r}
+ggplot(melbourne,aes(x=`Minimum temperature (Deg C)`))+geom_histogram(col="black")
+summary(melbourne$`Minimum temperature (Deg C)`)
+skewness(melbourne$`Minimum temperature (Deg C)`)
+```
+
+#### 4. 9am relative humidity (%):
+
+```{r}
+ggplot(melbourne,aes(x=`9am relative humidity (%)`))+geom_histogram(col="black")
+summary(melbourne$`9am relative humidity (%)`)
+skewness(melbourne$`9am relative humidity (%)`)
+```
+
+### Bivariate analysis:
+
+#### 1. log(`Evaporation (mm)`) vs. month:
+
+```{r}
+ggplot(melbourne,aes(x=log_eva, fill= month))+geom_histogram(col="black")+
+   labs(x="log(`Evaporation (mm)`)")
+ggplot(melbourne,aes(x=log_eva, fill= month))+
+  geom_histogram(col="black")+facet_wrap(~month)+
+  labs( x="log(`Evaporation (mm)`)")
+ggplot(melbourne,aes(month,log_eva))+geom_boxplot()+
+  labs( y="log(`Evaporation (mm)`)")
+summary(melbourne$log_eva,melbourne$month)
+res1 <- rcorr(melbourne$log_eva,melbourne$month)
+res1$r
+```
+
+#### 2. log(`Evaporation (mm)`) vs. day of week:
+
+```{r}
+ggplot(melbourne,aes(x=log_eva, fill= week_day))+ geom_histogram(col="black")+
+  labs(x="log(`Evaporation (mm)`)")
+ggplot(melbourne,aes(x=log_eva, fill= week_day))+
+  geom_histogram(col="black")+facet_wrap (~week_day)+
+  labs(x="log(`Evaporation (mm)`)")
+ggplot(melbourne,aes(week_day,log_eva))+geom_boxplot()+
+  labs(y="log(`Evaporation (mm)`)")
+summary(melbourne$log_eva,melbourne$week_day)
+res2 <- rcorr(melbourne$log_eva,melbourne$week_day)
+res2$r
+```
+
+#### 3. log(`Evaporation (mm)`) vs. log(`Maximum temperature (Deg C)`):
+
+```{r}
+ggplot(melbourne,aes(log_maxtemp,log_eva))+geom_point()+geom_smooth()+
+  labs(x="log(`Maximum temperature (Deg C)`)",y="log(`Evaporation (mm)`)")
+
+cor.test(melbourne$log_eva, melbourne$log_maxtemp)
+```
+
+#### 4. log(`Evaporation (mm)`) vs. `Minimum Temperature (Deg C)`:
+
+```{r}
+ggplot(melbourne,aes(`Minimum temperature (Deg C)`,log_eva))+geom_point()+geom_smooth()+
+  labs(y="log(`Evaporation (mm)`)")
+
+cor.test(melbourne$log_eva,melbourne$`Minimum temperature (Deg C)`)
+```
+
+#### 5. log(`Evaporation (mm)`) vs. `9am relative humidity (%)`:
+
+```{r}
+ggplot(melbourne,aes(`9am relative humidity (%)`,log_eva))+geom_point()+geom_smooth()+
+   labs(y="log(`Evaporation (mm)`)")
+
+cor.test(melbourne$log_eva,melbourne$`9am relative humidity (%)`)
+```
+
+### Check the independence of predictors:
+
+```{r}
+res <- rcorr(as.matrix(melbourne[,2:9]))
+res$r
+```
+
+### Model Selection:
+
+```{r}
+melbourne$mintemp <- melbourne$`Minimum temperature (Deg C)`
+melbourne$humid <- melbourne$`9am relative humidity (%)`
+melbourne_lm1 <-lm (log_eva ~ week_day + month + log_maxtemp + mintemp + humid +  month:humid, data= melbourne)
+summary(melbourne_lm1)
+anova(melbourne_lm1)
+
+# The model after removing the log maximum temperature:
+melbourne_lm2 <- lm (log_eva ~ week_day + month + mintemp + humid + month:humid, data= melbourne)
+summary(melbourne_lm2) 
+anova(melbourne_lm2)
+
+# Compare the both models by ANOVA:
+anova(melbourne_lm1 , melbourne_lm2)
+
+# Final model after removing the log maximum temperature and day of the week:
+melbourne_lm3 <- lm (log_eva ~ month  + mintemp + humid + month:humid, data= melbourne)
+summary(melbourne_lm3) 
+anova(melbourne_lm3)
+
+
+
+# Compare the both models by ANOVA:
+anova(melbourne_lm2 , melbourne_lm3)
+```
+
+#### Check the model for interaction term:
+
+```{r}
+melbourne_lm4 <- lm (log_eva ~ month  + mintemp + humid , data= melbourne)
+summary(melbourne_lm4)
+anova(melbourne_lm4)
+
+# Compare the both models by ANOVA:
+anova(melbourne_lm4 ,melbourne_lm3)
+
+
+```
+ 
+### Model diagnostics (assumptions):
+
+```{r}
+# first assumption: check the linear model,
+plot(melbourne_lm3,which=1)
+
+# second assumption: check the homoscedasticity,
+plot(melbourne_lm3,which=3)
+
+# Third assumption: check the normality,
+plot(melbourne_lm3,which=2)
+
+# Forth assumption: check the Independence of observations,
+checkresiduals(melbourne_lm3)
+
+library(car)
+durbinWatsonTest(melbourne_lm3)
+
+# Outliers and high levarage points and Influential values,
+plot(melbourne_lm3,which=4)
+plot(melbourne_lm3,which=5)
+
+library(broom)
+model.diag.metrics <- augment(melbourne_lm3)
+model.diag.metrics %>%
+  top_n(3, wt = .cooksd)
+```
+
+
+### Predictions
+
+. February 29, 2020, if this day has a minimum temperature of 13.8 degrees and reaches a
+maximum of 23.2 degrees, and has 74% humidity at 9am.
+
+. December 25, 2020, if this day has a minimum temperature of 16.4 degrees and reaches a
+maximum of 31.9 degrees, and has 57% humidity at 9am.
+
+. January 13, 2020, if this day has a minimum temperature of 26.5 degrees and reaches a
+maximum of 44.3 degrees, and has 35% humidity at 9am.
+
+. July 6, 2020, if this day has a minimum temperature of 6.8 degrees and reaches a maximum of 10.6 degrees, and has 76% humidity at 9am.
+
+
+```{r}
+
+pacman::p_load(mlbench)
+
+feb_eva <- tbl_df(exp(predict(melbourne_lm3,newdata= tibble(month="2", mintemp=13.8, humid=74),interval="confidence")))
+
+dec_eva <- tbl_df(exp(predict(melbourne_lm3,newdata= tibble(month="12", mintemp=16.4, humid=57),interval="confidence")))
+
+jan_eva <- tbl_df(exp(predict(melbourne_lm3,newdata= tibble(month="1", mintemp=26.5, humid=57),interval="confidence")))
+
+jul_eva <- tbl_df(exp(predict(melbourne_lm3,newdata= tibble(month="7", mintemp=6.8, humid=76),interval="confidence")))
+
+tibble_lm1 <- tibble(month=c(1,2,7,12),
+             fit=c(jan_eva$fit,feb_eva$fit,jul_eva$fit,dec_eva$fit),
+             lwr=c(jan_eva$lwr,feb_eva$lwr,jul_eva$lwr,dec_eva$lwr),
+             upr=c(jan_eva$upr,feb_eva$upr,jul_eva$upr,dec_eva$upr),
+             range=c((jan_eva$upr-jan_eva$lwr),(feb_eva$upr-feb_eva$lwr),(jul_eva$upr-jul_eva$lwr),(dec_eva$upr-dec_eva$lwr)))
+tibble_lm1 %>% head() %>%
+  kable(caption = "**Table 1 Predictions of Evaporation(mm) with 95% confidence intervals.**", digits=2)
+
+```
+
+### The end
+
