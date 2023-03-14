@@ -1,6 +1,6 @@
 ---
-title: "Assessment3:Case study"
-author: 'Zahra Ahmadpour(a1863476)'
+title: "Case study"
+author: 'Zahra Ahmadpour'
 date: "13/8/2022"
 output:
   html_document: default
